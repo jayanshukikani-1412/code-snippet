@@ -1,14 +1,16 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { fromUnixTime } from "date-fns";
-import { format } from "date-fns-tz";
+import { format, toZonedTime } from "date-fns-tz";
+import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "./constant";
+import { AxiosError } from "axios";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 // ========== remove empty from object ==========
-export const removeEmptyFromObject = <T extends Record<string, any>>(
+export const removeEmptyFromObject = <T extends Record<string, unknown>>(
   obj: T
 ) => {
   return Object.fromEntries(
@@ -26,6 +28,15 @@ export function formatDate(epochTime: number): string {
     timeZone: "UTC",
   });
 }
+
+// ========== timezone date and time formatter ==========
+export const formatDateTimeForTimeZone = (
+  date: Date,
+  timeZone: string
+): string => {
+  const zonedDate = toZonedTime(date, timeZone);
+  return format(zonedDate, "MMM dd, yyyy h:mm a", { timeZone });
+};
 
 // ========== format currency ==========
 export const formatCurrency = (amount: number) => {
@@ -55,8 +66,15 @@ export const parseKeyToTitle = (key: string): string => {
 };
 
 // ========== get nested value ==========
-export const getNestedValue = (obj: any, path: string) => {
-  return path.split(".").reduce((acc, part) => acc && acc[part], obj);
+export const getNestedValue = (obj: Record<string, unknown>, path: string) => {
+  return path
+    .split(".")
+    .reduce(
+      (acc, part) =>
+        acc &&
+        (acc[part as keyof typeof acc] as unknown as Record<string, unknown>),
+      obj
+    );
 };
 
 // ========== convert seconds to milliseconds ==========
@@ -133,3 +151,43 @@ export function generatePassword(length: number = 8): string {
     .sort(() => Math.random() - 0.5)
     .join("");
 }
+
+// ========== validate selected file type ==========
+export const validateFileType = (file: File): boolean => {
+  // Check file type
+  if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+    console.error(
+      `"${file.name}" is not a valid format. Only JPG and PNG images are accepted.`
+    );
+    return false;
+  }
+  return true;
+};
+
+// ========== validate file size ==========
+export const validateFileSize = (file: File): boolean => {
+  if (file.size > MAX_FILE_SIZE) {
+    console.error(`"${file.name}" is too large. Maximum allowed size is 10MB.`);
+    return false;
+  }
+  return true;
+};
+
+// ========== api error handler ==========
+export const errorHandler = (error: unknown) => {
+  if (error instanceof AxiosError && error?.response?.data?.errorCode) {
+    return error;
+  }
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === "ERR_NETWORK"
+  ) {
+    console.error("Network Error, Please Try Again");
+    return error;
+  } else if (error instanceof AxiosError) {
+    console.error(error?.response?.data?.message);
+    return error;
+  }
+};
